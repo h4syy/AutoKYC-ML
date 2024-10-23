@@ -6,4 +6,4 @@ router = APIRouter()
 @router.post("/run-inference")
 async def upload_file(file: UploadFile = File(...)):
     print("log router")
-    return await handle_inference(file=file)
+    return await handle_inference(file)
