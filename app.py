@@ -1,10 +1,14 @@
-from fastapi import FastAPI, UploadFile, File, HTTPException,status
+from datetime import datetime
+from fastapi import FastAPI, Request, UploadFile, File, HTTPException,status
 from pydantic import BaseModel
 from typing import List, Dict, Any
 import shutil
 import os
 from ultralytics import YOLO
 import boto3
+import dbconfig
+import json
+import aiomysql
 
 app = FastAPI()
 @app.on_event("startup")
@@ -82,13 +86,7 @@ class FaceComparisonResponse(BaseModel):
        msisdn: str
        session_id: str
 
-import dbconfig
 
-
-
-
-import json
-import aiomysql
 
 async def insert_face_compare_result(session_id, csid, confidence, similarity, details, msisdn):
     query = """
@@ -203,6 +201,33 @@ async def run_face_comparison(source_image_path: str, target_image_path: str):
     except Exception as e:
         print(f"Error during face comparison: {e}")
         raise HTTPException(status_code=500, detail="Face comparison failed.")
+    
+@app.post("/liveness/post-data")
+async def post_data(request: Request):
+    # log request body data
+    request_data = await request.json()
+    print(f"Received request data: {request.body}")
+    liveness_data = {
+        "SessionId": request_data.get("SessionId"),
+        "MSISDN": request_data.get("MSISDN"),
+        "CreatedDate": datetime.now(),
+        "Confidence": request_data.get("Confidence"),
+        # "BoundingBox": json.dumps(request_data.get("ReferenceImage", {}).get("BoundingBox")), // Not from ReferenceImage,from Audit Image
+        "BoundingBox": json.dumps(request_data.get("AuditImages", [{}])[0].get("BoundingBox")),
+        "CSID": request_data.get(""),
+        "Status": request_data.get("Status"),
+        # "LivenessPhotopath": request_data.get("ReferenceImage", {}).get("S3Object", {}).get("Name"),// Not from ReferenceImage,from Audit Image
+        "LivenessPhotopath": request_data.get("AuditImages", [{}])[0].get("S3Object", {}).get("Name"),
+
+        "Details": json.dumps({
+            "ReferenceImage": request_data.get("ReferenceImage"),
+            "AuditImages": request_data.get("AuditImages")
+        })
+    }
+    return {"message": "Data processed successfully", "data": liveness_data}
+    # return {"message": "Data received successfully"}
+
+
         
 # Run the app with uvicorn if executing directly
 if __name__ == "__main__":
