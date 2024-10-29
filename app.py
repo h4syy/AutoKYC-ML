@@ -7,8 +7,14 @@ from ultralytics import YOLO
 import boto3
 
 app = FastAPI()
+@app.on_event("startup")
+async def startup_event():
+    await dbconfig.init_db_pool()
 
-# Load the trained YOLO model
+@app.on_event("shutdown")
+async def shutdown_event():
+    await dbconfig.close_db_pool()
+
 model = YOLO('best.pt')
 
 output_dir = 'D:/ml backend for autokyc/ML-BACKEND/AutoKYC-ML/output'
@@ -48,8 +54,8 @@ async def detect_document(file: UploadFile = File(...)):
                 session_id= '89bb23de-c331-4cae-bcb3-babb55ebcbfe'
             ))
 
-    # # Optionally, delete the temporary image
-    # os.remove(temp_image_path)
+    # Optionally, delete the temporary image
+    os.remove(temp_image_path)
 
     return DetectionResponse(detections=detections)
 
@@ -66,24 +72,40 @@ rekognition_client = boto3.client(
 )
 
 class FaceComparisonResult(BaseModel):
-    similarity: float
-    bounding_box: Dict[str, float]
+       similarity: float
+       bounding_box: Dict[str, float] 
 
 class FaceComparisonResponse(BaseModel):
-    source_image_bounding_box: Dict[str, float]
-    face_matches: List[FaceComparisonResult]
-    unmatched_faces: List[Dict[str, Any]]
-    msisdn: str
-    session_id: str
+       source_image_bounding_box: Dict[str, float]
+       face_matches: List[FaceComparisonResult]
+       unmatched_faces: List[Dict[str, Any]]
+       msisdn: str
+       session_id: str
+
+import dbconfig
+
+
+
+
+import json
+import aiomysql
+
+async def insert_face_compare_result(session_id, csid, confidence, similarity, details, msisdn):
+    query = """
+    INSERT INTO FaceCompare (SessionId, CreatedDate, CSID, Confidence, Similarity, Details, MSISDN)
+    VALUES (%s, NOW(), %s, %s, %s, %s, %s)
+    """
+    async with dbconfig.db_pool.acquire() as conn:
+        async with conn.cursor() as cursor:
+            await cursor.execute(query, (session_id, csid, confidence, similarity, json.dumps(details), msisdn))
+            await conn.commit()
 
 @app.post("/face/face-compare", response_model=FaceComparisonResponse)
-async def face_compare(document_front: UploadFile = File(...), liveness_document: UploadFile = File(...)):
-    # Define temporary file paths
+async def face_compare(document_front: UploadFile, liveness_document: UploadFile):
+
     temp_front_document = os.path.join(output_dir, document_front.filename)
     temp_liveness_path = os.path.join(output_dir, liveness_document.filename)
-    
-    
-    
+
     with open(temp_front_document, "wb") as buffer:
         shutil.copyfileobj(document_front.file, buffer)
     with open(temp_liveness_path, "wb") as buffer:
@@ -92,6 +114,27 @@ async def face_compare(document_front: UploadFile = File(...), liveness_document
     # Perform face comparison
     try:
         result = await run_face_comparison(temp_front_document, temp_liveness_path)
+        # Extract necessary data for Database insertion
+        print("Result reached this point:", result)
+
+        session_id = result.session_id
+        msisdn = result.msisdn
+        face_matches = result.face_matches
+
+        for match in face_matches:
+            confidence = match.similarity  # Corrected to use .similarity
+            similarity = match.similarity  # Assuming 'confidence' and 'similarity' are the same here
+            details = match.dict()  # Convert Pydantic model to dictionary for JSON serialization
+
+            await insert_face_compare_result(
+                session_id=session_id,
+                csid=None,  # Adjust as needed, or remove if you won't use this field
+                confidence=confidence,
+                similarity=similarity,
+                details=details,
+                msisdn=int(msisdn)
+            )
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     finally:
@@ -117,40 +160,50 @@ async def run_face_comparison(source_image_path: str, target_image_path: str):
         raise HTTPException(status_code=400, detail="One or both image files are empty")
     
     try:
-        response = rekognition_client.compare_faces(
-            SourceImage={'Bytes': source_bytes},
-            TargetImage={'Bytes': target_bytes},
-            SimilarityThreshold=0
-        )
-        
-        face_matches = response.get('FaceMatches', [])
-        unmatched_faces = response.get('UnmatchedFaces', [])
-        source_bounding_box = response.get('SourceImageFace', {}).get('BoundingBox', {})
-        msisdn = '1234567890'
-        session_id = '89bb23de-c331-4cae-bcb3-babb55ebcbfe'
-        
-        results = {
-            "source_image_bounding_box": source_bounding_box,
-            "face_matches": [],
-            "unmatched_faces": unmatched_faces,
-            "msisdn" : msisdn,
-            "session_id": session_id
-        }
+       response = rekognition_client.compare_faces(
+           SourceImage={'Bytes': source_bytes},
+           TargetImage={'Bytes': target_bytes},
+           SimilarityThreshold=0
+       )
 
-        for match in face_matches:
-            similarity = match['Similarity']
-            bounding_box = match['Face']['BoundingBox']
-            results['face_matches'].append({
-                "similarity": similarity,
-                "bounding_box": bounding_box,
-            })
+       face_matches = response.get('FaceMatches', [])
+       unmatched_faces = response.get('UnmatchedFaces', [])
+       source_bounding_box = response.get('SourceImageFace', {}).get('BoundingBox', {})
+       msisdn = '1234567890'
+       session_id = '89bb23de-c331-4cae-bcb3-babb55ebcbfe'
+       
+       results = {
+           "source_image_bounding_box": source_bounding_box,
+           "face_matches": [],
+           "unmatched_faces": unmatched_faces,
+           "msisdn": msisdn,
+           "session_id": session_id
+       }
 
-        return FaceComparisonResponse(**results)
+       for match in face_matches:
+           similarity = match['Similarity']
+           face_bounding_box = match['Face']['BoundingBox']
+
+           bounding_box = {
+               "width": face_bounding_box['Width'],
+               "height": face_bounding_box['Height'],
+               "left": face_bounding_box['Left'],
+               "top": face_bounding_box['Top'],
+           }
+
+           face_match_result = FaceComparisonResult(
+               similarity=similarity,
+               bounding_box=bounding_box
+           )
+           
+           results['face_matches'].append(face_match_result)
+
+       return FaceComparisonResponse(**results)
 
     except Exception as e:
         print(f"Error during face comparison: {e}")
-        raise Exception("Face comparison failed.")
-    
+        raise HTTPException(status_code=500, detail="Face comparison failed.")
+        
 # Run the app with uvicorn if executing directly
 if __name__ == "__main__":
     import uvicorn
