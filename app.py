@@ -212,11 +212,9 @@ async def post_data(request: Request):
         "MSISDN": request_data.get("MSISDN"),
         "CreatedDate": datetime.now(),
         "Confidence": request_data.get("Confidence"),
-        # "BoundingBox": json.dumps(request_data.get("ReferenceImage", {}).get("BoundingBox")), // Not from ReferenceImage,from Audit Image
         "BoundingBox": json.dumps(request_data.get("AuditImages", [{}])[0].get("BoundingBox")),
         "CSID": request_data.get(""),
         "Status": request_data.get("Status"),
-        # "LivenessPhotopath": request_data.get("ReferenceImage", {}).get("S3Object", {}).get("Name"),// Not from ReferenceImage,from Audit Image
         "LivenessPhotopath": request_data.get("AuditImages", [{}])[0].get("S3Object", {}).get("Name"),
 
         "Details": json.dumps({
