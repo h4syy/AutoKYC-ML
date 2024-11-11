@@ -252,31 +252,47 @@ async def run_face_comparison(source_image_path: str, target_image_path: str):
         logger.error(f"Error during face comparison: {e}")
         raise HTTPException(status_code=500, detail="Face comparison failed.")
     
+async def insert_liveness_result(session_id, csid, liveness_photopath, bounding_box,confidence):
+    query = """
+    INSERT INTO liveness (SessionId, CreatedDate, CSID, LivenessPhotopath, BoundingBox, Confidence)
+    VALUES (%s, NOW(), %s, %s, %s)
+    """
+    async with dbconfig.db_pool.acquire() as conn:
+        async with conn.cursor() as cursor:
+            await cursor.execute(query, (session_id, csid, liveness_photopath, bounding_box,confidence))
+            await conn.commit()
+
 @app.post("/liveness/post-data")
 async def post_data(request: Request):
     # log request body data
     request_data = await request.json()
     print(f"Received request data: {request.body}")
+    session_id = request_data.get("SessionId")
+    csid = request_data.get("CSID")
+    liveness_photopath = request_data.get("AuditImages", [{}])[0].get("S3Object", {}).get("Name")
+    bounding_box = json.dumps(request_data.get("AuditImages", [{}])[0].get("BoundingBox"))
+    confidence = request_data.get("Confidence")
+    msisdn = request_data.get("MSISDN")
+    status = request_data.get("Status")
+    referenceImg = request_data.get("ReferenceImage")
+    auditImages = request_data.get("AuditImages")
     liveness_data = {
-        "SessionId": request_data.get("SessionId"),
-        "MSISDN": request_data.get("MSISDN"),
+        "SessionId": session_id,
+        "MSISDN": msisdn,
         "CreatedDate": datetime.now(),
-        "Confidence": request_data.get("Confidence"),
-        "BoundingBox": json.dumps(request_data.get("AuditImages", [{}])[0].get("BoundingBox")),
-        "CSID": request_data.get(""),
-        "Status": request_data.get("Status"),
-        "LivenessPhotopath": request_data.get("AuditImages", [{}])[0].get("S3Object", {}).get("Name"),
-
+        "Confidence": confidence,
+        "BoundingBox": bounding_box,
+        "CSID": csid,
+        "Status": status,
+        "LivenessPhotopath": liveness_photopath,
         "Details": json.dumps({
-            "ReferenceImage": request_data.get("ReferenceImage"),
-            "AuditImages": request_data.get("AuditImages")
+            "ReferenceImage": referenceImg,
+            "AuditImages": auditImages
         })
     }
+    await insert_liveness_result(session_id,csid,liveness_photopath,bounding_box,confidence)
     return {"message": "Data processed successfully", "data": liveness_data}
-    # return {"message": "Data received successfully"}
 
-
-        
 # Run the app with uvicorn if executing directly
 if __name__ == "__main__":
     import uvicorn
