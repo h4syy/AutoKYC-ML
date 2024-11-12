@@ -1,3 +1,3 @@
 ## To start the application
 
-uvicorn app:app
+uvicorn app:app --reload
