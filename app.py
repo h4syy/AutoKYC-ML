@@ -75,14 +75,38 @@ os.makedirs(output_dir, exist_ok=True)
 
 #datatypes configuration
 class Detection(BaseModel):
-    classification: str
-    bounding_box: str
-    confidence_score: float
-    msisdn: int
     session_id: str
+    csid: str
+    predicted_class: str
+    document_photo_path: str
+    bounding_box: str
+    confidence: float
+    details: dict
+    msisdn: int
 
 class DetectionResponse(BaseModel):
     detections: List[Detection]
+ 
+async def insert_detections_into_db(detections: List[Detection]):
+    async with dbconfig.db_pool.acquire() as conn:
+        async with conn.cursor() as cursor:
+            insert_query = """
+            INSERT INTO documentdetection (SessionId, CSID, PredictedClass, DocumentPhotopath, BoundingBox, Confidence, Details, MSISDN)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            """
+            for detection in detections:
+                await cursor.execute(insert_query, (
+                    detection.session_id,
+                    detection.csid,
+                    detection.predicted_class,
+                    detection.document_photo_path,
+                    detection.bounding_box,
+                    detection.confidence,
+                    json.dumps(detection.details),  # Convert dict to JSON string for `Details` column
+                    detection.msisdn
+                ))
+            await conn.commit()
+            logger.info("Detections inserted into the database.")
 
 @app.post("/document-detection/inference", response_model=DetectionResponse)
 async def detect_document(file: UploadFile = File(...)):
@@ -102,22 +126,23 @@ async def detect_document(file: UploadFile = File(...)):
 
         for box, confidence, class_name in zip(boxes, confidences, class_names):
             detections.append(Detection(
+                session_id="89bb23de-c331-4cae-bcb3-babb55ebcbfe",
+                csid="12345",  
+                predicted_class=class_name,
+                document_photo_path=temp_image_path,
                 bounding_box=str(box),
-                confidence_score=confidence,
-                classification=class_name,
-                msisdn = '1234567890',
-                session_id= '89bb23de-c331-4cae-bcb3-babb55ebcbfe'
+                confidence=confidence,
+                details={},  
+                msisdn=1234567890
             ))
+
+    await insert_detections_into_db(detections)
 
     # Optionally, delete the temporary image
     os.remove(temp_image_path)
     logger.info("Temp image removed.")
     logger.info("Document detection inference completed.")
     return DetectionResponse(detections=detections)
-
-AWS_ACCESS_KEY_ID = "AKIAZQ3DTJ4GVMWRSCVR" 
-AWS_SECRET_ACCESS_KEY = "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"
-AWS_REGION = "us-east-1"
 
 # Initialize Rekognition client using boto3
 rekognition_client = boto3.client(
