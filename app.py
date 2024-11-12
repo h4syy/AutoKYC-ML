@@ -70,7 +70,7 @@ async def shutdown_event():
 
 model = YOLO('best.pt')
 
-output_dir = 'D:/ml backend for autokyc/ML-BACKEND/AutoKYC-ML/output'
+output_dir = '/output'
 os.makedirs(output_dir, exist_ok=True)
 
 #datatypes configuration
@@ -108,6 +108,17 @@ async def insert_detections_into_db(detections: List[Detection]):
             await conn.commit()
             logger.info("Detections inserted into the database.")
 
+async def insert_document_detection_results(sessionId, csid, predictedClass, documentPhotoPath, boundingBox, confidence, details, MSISDN):
+    print('GEDA')
+    query = """
+    INSERT INTO Documentdetection (CreatedDate, SessionId, CSID, PredictedClass, DocumentPhotoPath, BoundingBox, Confidence, Details, MSISDN)
+    VALUES (NOW(), %s, %s, %s, %s, %s, %s, %s, %s)
+    """
+    async with dbconfig.db_pool.acquire() as conn:
+        async with conn.cursor() as cursor:
+            await cursor.execute(query, (sessionId, csid, predictedClass, documentPhotoPath, boundingBox, confidence, json.dumps(details), MSISDN))
+            await conn.commit()
+
 @app.post("/document-detection/inference", response_model=DetectionResponse)
 async def detect_document(file: UploadFile = File(...)):
     logger.info("Document detection inference started.")
@@ -135,9 +146,8 @@ async def detect_document(file: UploadFile = File(...)):
                 details={},  
                 msisdn=1234567890
             ))
-
     await insert_detections_into_db(detections)
-
+    
     # Optionally, delete the temporary image
     os.remove(temp_image_path)
     logger.info("Temp image removed.")
@@ -277,14 +287,15 @@ async def run_face_comparison(source_image_path: str, target_image_path: str):
         logger.error(f"Error during face comparison: {e}")
         raise HTTPException(status_code=500, detail="Face comparison failed.")
     
-async def insert_liveness_result(session_id, csid, liveness_photopath, bounding_box,confidence):
+async def insert_liveness_result(session_id, csid, liveness_photopath, bounding_box, confidence, status, msisdn, details):
+    print(type(session_id), type(csid), type(liveness_photopath), type(bounding_box),type((confidence)),type(status), type(msisdn), type((details)) )
     query = """
-    INSERT INTO liveness (SessionId, CreatedDate, CSID, LivenessPhotopath, BoundingBox, Confidence)
-    VALUES (%s, NOW(), %s, %s, %s)
+    INSERT INTO liveness (SessionId, CreatedDate, CSID, LivenessPhotopath, BoundingBox, Confidence, Status, MSISDN, Details)
+    VALUES (%s, NOW(), %s, %s, %s, %s, %s, %s, %s)
     """
     async with dbconfig.db_pool.acquire() as conn:
         async with conn.cursor() as cursor:
-            await cursor.execute(query, (session_id, csid, liveness_photopath, bounding_box,confidence))
+            await cursor.execute(query, (session_id, csid, liveness_photopath, bounding_box, (confidence), status, msisdn, details))
             await conn.commit()
 
 @app.post("/liveness/post-data")
@@ -315,7 +326,7 @@ async def post_data(request: Request):
             "AuditImages": auditImages
         })
     }
-    await insert_liveness_result(session_id,csid,liveness_photopath,bounding_box,confidence)
+    await insert_liveness_result(session_id,csid,liveness_photopath,bounding_box,float(confidence),status, msisdn, liveness_data["Details"])
     return {"message": "Data processed successfully", "data": liveness_data}
 
 # Run the app with uvicorn if executing directly
