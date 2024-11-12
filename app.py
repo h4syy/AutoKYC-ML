@@ -135,7 +135,7 @@ async def detect_document(file: UploadFile = File(...)):
                 details={},  
                 msisdn=1234567890
             ))
-            await insert_detections_into_db(detections)
+        await insert_detections_into_db(detections)
     
     # Optionally, delete the temporary image
     os.remove(temp_image_path)
@@ -179,7 +179,6 @@ async def face_compare(document_front: UploadFile, liveness_document: UploadFile
     logger.info("Face comparison inference started.")
     temp_front_document = os.path.join(output_dir, document_front.filename)
     temp_liveness_path = os.path.join(output_dir, liveness_document.filename)
-
     with open(temp_front_document, "wb") as buffer:
         shutil.copyfileobj(document_front.file, buffer)
     with open(temp_liveness_path, "wb") as buffer:
@@ -199,7 +198,7 @@ async def face_compare(document_front: UploadFile, liveness_document: UploadFile
 
             await insert_face_compare_result(
                 session_id=session_id,
-                csid=None,
+                csid='CS987654321',
                 confidence=confidence,
                 similarity=similarity,
                 details=details,
