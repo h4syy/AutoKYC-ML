@@ -70,7 +70,7 @@ async def shutdown_event():
 
 model = YOLO('best.pt')
 
-output_dir = 'D:/ml backend for autokyc/ML-BACKEND/AutoKYC-ML/output'
+output_dir = '/output'
 os.makedirs(output_dir, exist_ok=True)
 
 #datatypes configuration
