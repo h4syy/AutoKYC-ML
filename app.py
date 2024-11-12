@@ -108,17 +108,6 @@ async def insert_detections_into_db(detections: List[Detection]):
             await conn.commit()
             logger.info("Detections inserted into the database.")
 
-async def insert_document_detection_results(sessionId, csid, predictedClass, documentPhotoPath, boundingBox, confidence, details, MSISDN):
-    print('GEDA')
-    query = """
-    INSERT INTO Documentdetection (CreatedDate, SessionId, CSID, PredictedClass, DocumentPhotoPath, BoundingBox, Confidence, Details, MSISDN)
-    VALUES (NOW(), %s, %s, %s, %s, %s, %s, %s, %s)
-    """
-    async with dbconfig.db_pool.acquire() as conn:
-        async with conn.cursor() as cursor:
-            await cursor.execute(query, (sessionId, csid, predictedClass, documentPhotoPath, boundingBox, confidence, json.dumps(details), MSISDN))
-            await conn.commit()
-
 @app.post("/document-detection/inference", response_model=DetectionResponse)
 async def detect_document(file: UploadFile = File(...)):
     logger.info("Document detection inference started.")
@@ -146,7 +135,7 @@ async def detect_document(file: UploadFile = File(...)):
                 details={},  
                 msisdn=1234567890
             ))
-    await insert_detections_into_db(detections)
+            await insert_detections_into_db(detections)
     
     # Optionally, delete the temporary image
     os.remove(temp_image_path)
