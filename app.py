@@ -1,4 +1,4 @@
-from fastapi import FastAPI, UploadFile, File,Form, HTTPException, status, Request
+from fastapi import FastAPI, UploadFile, File,Form, HTTPException, Request
 from pydantic import BaseModel
 from typing import List, Dict, Any
 import shutil
@@ -110,12 +110,6 @@ async def detect_document(
     csid: str = Form(...),
     msisdn: int = Form(...)
 ):
-    
-    max_file_size = 10 * 1024 * 1024  # 10 MB
-    # Check file size
-    file_size = len(await file.read())
-    if file_size > max_file_size:
-        raise HTTPException(status_code=400, detail="File size exceeds the maximum limit of 10MB.")
     
     logger.info("Document detection inference started.")
     temp_image_path = os.path.join(output_dir, file.filename)
