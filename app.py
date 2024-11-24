@@ -1,6 +1,4 @@
-from fastapi import FastAPI, UploadFile, File, HTTPException, status
-from datetime import datetime
-from fastapi import FastAPI, Request, UploadFile, File, HTTPException,status
+from fastapi import FastAPI, UploadFile, File,Form, HTTPException, status, Request
 from pydantic import BaseModel
 from typing import List, Dict, Any
 import shutil
@@ -54,9 +52,6 @@ logger.setLevel(logging.INFO)
 logger_handler = MySQLHandler(logger_db_config)
 logger_handler.setFormatter(logging.Formatter("%(message)s"))
 logger.addHandler(logger_handler)
-import dbconfig
-import json
-import aiomysql
 
 app = FastAPI()
 @app.on_event("startup")
@@ -109,39 +104,66 @@ async def insert_detections_into_db(detections: List[Detection]):
             logger.info("Detections inserted into the database.")
 
 @app.post("/document-detection/inference", response_model=DetectionResponse)
-async def detect_document(file: UploadFile = File(...)):
+async def detect_document(
+    file: UploadFile = File(...),
+    session_id: str = Form(...),
+    csid: str = Form(...),
+    msisdn: int = Form(...)
+):
+    
+    max_file_size = 10 * 1024 * 1024  # 10 MB
+    # Check file size
+    file_size = len(await file.read())
+    if file_size > max_file_size:
+        raise HTTPException(status_code=400, detail="File size exceeds the maximum limit of 10MB.")
+    
     logger.info("Document detection inference started.")
     temp_image_path = os.path.join(output_dir, file.filename)
-    with open(temp_image_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
-    results = model.predict(source=temp_image_path, save=True, save_txt=True, save_conf=True)
     
-    #parses the result from got from the model
-    detections = []
-    for result in results:
-        boxes = result.boxes.xyxy.cpu().numpy().tolist()  # Bounding box coordinates
-        confidences = result.boxes.conf.cpu().numpy().tolist()  # Confidence scores
-        class_ids = result.boxes.cls.cpu().numpy().tolist()  # Class IDs from the model
-        class_names = [model.names[int(cls)] for cls in class_ids]  # Class names
+    try:
+        # Save the uploaded file to a temporary location
+        with open(temp_image_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+        logger.info(f"File saved to {temp_image_path}.")
 
-        for box, confidence, class_name in zip(boxes, confidences, class_names):
-            detections.append(Detection(
-                session_id="89bb23de-c331-4cae-bcb3-babb55ebcbfe",
-                csid="12345",  
-                predicted_class=class_name,
-                document_photo_path=temp_image_path,
-                bounding_box=str(box),
-                confidence=confidence,
-                details={},  
-                msisdn=1234567890
-            ))
+        # Perform model inference
+        results = model.predict(source=temp_image_path, save=True, save_txt=True, save_conf=True)
+        detections = []
+
+        # Parse the results from the model
+        for result in results:
+            boxes = result.boxes.xyxy.cpu().numpy().tolist()  # Bounding box coordinates
+            confidences = result.boxes.conf.cpu().numpy().tolist()  # Confidence scores
+            class_ids = result.boxes.cls.cpu().numpy().tolist()  # Class IDs from the model
+            class_names = [model.names[int(cls)] for cls in class_ids]  # Class names
+
+            for box, confidence, class_name in zip(boxes, confidences, class_names):
+                detections.append(Detection(
+                    session_id=session_id,
+                    csid=csid,
+                    predicted_class=class_name,
+                    document_photo_path=temp_image_path,
+                    bounding_box=str(box),
+                    confidence=confidence,
+                    details={},
+                    msisdn=msisdn
+                ))
+        
+        # Insert detections into the database
         await insert_detections_into_db(detections)
+
+        logger.info("Document detection inference completed.")
+        return DetectionResponse(detections=detections)
+
+    except Exception as e:
+        logger.error(f"Error during document detection: {e}")
+        raise HTTPException(status_code=500, detail="An error occurred during document detection.")
     
-    # Optionally, delete the temporary image
-    os.remove(temp_image_path)
-    logger.info("Temp image removed.")
-    logger.info("Document detection inference completed.")
-    return DetectionResponse(detections=detections)
+    finally:
+        # Ensure the temporary image file is removed
+        if os.path.exists(temp_image_path):
+            os.remove(temp_image_path)
+            logger.info(f"Temporary file {temp_image_path} removed.")
 
 # Initialize Rekognition client using boto3
 rekognition_client = boto3.client(
