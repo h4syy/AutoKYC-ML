@@ -3,13 +3,17 @@ from pydantic import BaseModel
 from typing import List, Dict, Any
 import shutil
 import os
-from ultralytics import YOLO
 import boto3
 import json
 import dbconfig
 import asyncio
 import logging
 import aiomysql
+import torch
+import warnings
+
+warnings.filterwarnings("ignore", category=FutureWarning)
+
 
 # Define logger configuration
 class MySQLHandler(logging.Handler):
@@ -63,7 +67,9 @@ async def startup_event():
 async def shutdown_event():
     await dbconfig.close_db_pool()
 
-model = YOLO('best.pt')
+# Load the YOLO model once when the server starts
+model = torch.hub.load('ultralytics/yolov5', 'custom', path='D:/AutoKYC-ML/best.pt', force_reload=False)
+
 
 output_dir = '/output'
 os.makedirs(output_dir, exist_ok=True)
@@ -121,27 +127,23 @@ async def detect_document(
         logger.info(f"File saved to {temp_image_path}.")
 
         # Perform model inference
-        results = model.predict(source=temp_image_path, save=True, save_txt=True, save_conf=True)
+        results = model(temp_image_path)
         detections = []
 
         # Parse the results from the model
-        for result in results:
-            boxes = result.boxes.xyxy.cpu().numpy().tolist()  # Bounding box coordinates
-            confidences = result.boxes.conf.cpu().numpy().tolist()  # Confidence scores
-            class_ids = result.boxes.cls.cpu().numpy().tolist()  # Class IDs from the model
-            class_names = [model.names[int(cls)] for cls in class_ids]  # Class names
+        for *box, confidence, cls in results.xyxy[0].tolist():  # Get detections
+            class_name = results.names[int(cls)]  # Get class name
 
-            for box, confidence, class_name in zip(boxes, confidences, class_names):
-                detections.append(Detection(
-                    session_id=session_id,
-                    csid=csid,
-                    predicted_class=class_name,
-                    document_photo_path=temp_image_path,
-                    bounding_box=str(box),
-                    confidence=confidence,
-                    details={},
-                    msisdn=msisdn
-                ))
+            detections.append(Detection(
+                session_id=session_id,
+                csid=csid,
+                predicted_class=class_name,
+                document_photo_path=temp_image_path,
+                bounding_box=str(box),
+                confidence=confidence,
+                details={},
+                msisdn=msisdn
+            ))
         
         # Insert detections into the database
         await insert_detections_into_db(detections)
