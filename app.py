@@ -68,7 +68,7 @@ async def shutdown_event():
     await dbconfig.close_db_pool()
 
 # Load the YOLO model once when the server starts
-model = torch.hub.load('ultralytics/yolov5', 'custom', path='D:/AutoKYC-ML/best.pt', force_reload=False)
+model = torch.hub.load('ultralytics/yolov5', 'custom', path='best.pt', force_reload=False)
 
 
 output_dir = '/output'
