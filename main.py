@@ -9,7 +9,7 @@ load_dotenv()
 app = FastAPI()
 
 # Register the routers with specific URL prefixes
-# app.include_router(document_detection.router, prefix="/api")
+app.include_router(document_detection.router, prefix="/api")
 app.include_router(face_comparision.router, prefix="/api")
 app.include_router(liveness.router, prefix="/api")
 
