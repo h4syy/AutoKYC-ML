@@ -7,3 +7,4 @@ python-multipart
 aiomysql
 boto3
 cryptography
+dotenv
