@@ -1,7 +1,7 @@
 from fastapi import APIRouter, UploadFile, HTTPException, File
-from MODELS.schemas import FaceComparisonResponse, FaceComparisonResult
-from UTILS.aws_rekognition import run_face_comparison
-from UTILS.logger import logger
+from models.schemas import FaceComparisonResponse, FaceComparisonResult
+from utils.aws_rekognition import run_face_comparison
+from utils.logger import logger
 import os
 import shutil
 import json

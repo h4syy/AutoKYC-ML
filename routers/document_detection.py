@@ -1,6 +1,6 @@
 from fastapi import APIRouter, UploadFile, File, HTTPException, Form
-from MODELS.schemas import Detection, DetectionResponse
-from UTILS.logger import logger
+from models.schemas import Detection, DetectionResponse
+from utils.logger import logger
 from database import dbconfig
 import shutil
 import os
