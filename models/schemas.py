@@ -5,6 +5,7 @@ from typing import List, Dict, Any
 class Detection(BaseModel):
     session_id: str
     csid: str
+    id_type: int
     predicted_class: str
     document_photo_path: str
     bounding_box: str
