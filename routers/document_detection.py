@@ -23,7 +23,7 @@ async def detect_document(
 ):
     logger.info(f"Document detection inference started for session_id: {session_id}")
     temp_image_path = os.path.join(output_dir, file.filename)
-
+        #face compare bata aako response fail bhayepachi yaha rakhne 
     id_type_mapping = {
         "CS": 1,   
         "DL": 2, 
@@ -47,9 +47,6 @@ async def detect_document(
         prefix = class_name[:-1] if suffix in {"F", "B"} else class_name
         id_type = id_type_mapping.get(prefix, -1)
 
-        if id_type == -1:
-            raise HTTPException(status_code=400, detail="Invalid ID type detected.")
-
         async with dbconfig.db_pool.acquire() as conn:
             async with conn.cursor() as cursor:
                 await cursor.execute(
@@ -66,11 +63,6 @@ async def detect_document(
                         )
                 else:
                     last_id_type, last_class = existing_entries[0]
-                    if suffix == "F":
-                        raise HTTPException(
-                            status_code=400,
-                            detail="Front ID already uploaded. Upload the back ID next."
-                        )
                     if id_type != last_id_type:
                         raise HTTPException(
                             status_code=400,
