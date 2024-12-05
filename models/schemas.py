@@ -27,7 +27,7 @@ class FaceComparisonResponse(BaseModel):
     source_image_bounding_box: Dict[str, float]
     face_matches: List[FaceComparisonResult]
     unmatched_faces: List[Dict[str, Any]]
-    msisdn: str
+    msisdn: int
     session_id: str
 
 # Schema for liveness data
