@@ -5,6 +5,7 @@ from typing import List, Dict, Any
 class Detection(BaseModel):
     session_id: str
     csid: str
+    id_type: int
     predicted_class: str
     document_photo_path: str
     bounding_box: str
@@ -26,7 +27,7 @@ class FaceComparisonResponse(BaseModel):
     source_image_bounding_box: Dict[str, float]
     face_matches: List[FaceComparisonResult]
     unmatched_faces: List[Dict[str, Any]]
-    msisdn: str
+    msisdn: int
     session_id: str
 
 # Schema for liveness data
