@@ -14,7 +14,7 @@ model = torch.hub.load('ultralytics/yolov5', 'custom', path='best.pt', force_rel
 output_dir = '/output'
 os.makedirs(output_dir, exist_ok=True)
 
-@router.post("/document-detection/inference", response_model=DetectionResponse)
+@router.post("/document-detection/inference/back", response_model=DetectionResponse)
 async def detect_document(
     file: UploadFile = File(...),
     session_id: str = Form(...),
