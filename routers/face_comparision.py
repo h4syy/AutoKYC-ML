@@ -1,4 +1,4 @@
-from fastapi import APIRouter, UploadFile, HTTPException, File
+from fastapi import APIRouter, UploadFile, HTTPException, File, Form
 from MODELS.schemas import FaceComparisonResponse, FaceComparisonResult
 from UTILS.aws_rekognition import run_face_comparison
 from UTILS.logger import logger
@@ -10,7 +10,13 @@ from database import dbconfig
 router = APIRouter()
 
 @router.post("/face/compare", response_model=FaceComparisonResponse)
-async def face_compare(document_front: UploadFile = File(...), liveness_document: UploadFile = File(...)):
+async def face_compare(
+    document_front: UploadFile = File(...),
+    liveness_document: UploadFile = File(...),
+    session_id: str = Form(...),
+    csid: str = Form(...),
+    msisdn: int = Form(...)
+):
     logger.info("Face comparison inference started.")
     temp_front_document = os.path.join("/output", document_front.filename)
     temp_liveness_path = os.path.join("/output", liveness_document.filename)
@@ -24,12 +30,9 @@ async def face_compare(document_front: UploadFile = File(...), liveness_document
     try:
         result = await run_face_comparison(temp_front_document, temp_liveness_path)
 
-        session_id = result['session_id']
-        msisdn = result['msisdn']
         face_matches = result['face_matches']
 
         for match in face_matches:
-            confidence = match['similarity']
             similarity = match['similarity']
             details = {
                 "similarity": similarity,
@@ -38,11 +41,10 @@ async def face_compare(document_front: UploadFile = File(...), liveness_document
 
             await insert_face_compare_result(
                 session_id=session_id,
-                csid='CS987654321',  # Use appropriate CSID
-                confidence=confidence,
+                csid=csid,
                 similarity=similarity,
                 details=details,
-                msisdn=int(msisdn)
+                msisdn=msisdn
             )
 
         logger.info("Face comparison completed.")
@@ -63,12 +65,9 @@ async def face_compare(document_front: UploadFile = File(...), liveness_document
         session_id=session_id
     )
 
-async def insert_face_compare_result(session_id, csid, confidence, similarity, details, msisdn):
-    query = """
-    INSERT INTO FaceCompare (SessionId, CreatedDate, CSID, Confidence, Similarity, Details, MSISDN)
-    VALUES (%s, NOW(), %s, %s, %s, %s, %s)
-    """
+async def insert_face_compare_result(session_id, csid, similarity, details, msisdn):
+    sp_query = "CALL SP_INSERT_FACECOMPARE(%s, %s, %s, %s, %s)"
     async with dbconfig.db_pool.acquire() as conn:
         async with conn.cursor() as cursor:
-            await cursor.execute(query, (session_id, csid, confidence, similarity, json.dumps(details), msisdn))
+            await cursor.execute(sp_query, (msisdn, session_id, csid, similarity, json.dumps(details)))
             await conn.commit()

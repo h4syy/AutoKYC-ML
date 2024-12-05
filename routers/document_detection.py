@@ -105,22 +105,20 @@ async def detect_document(
 async def insert_detections_into_db(detections: list[Detection]):
     async with dbconfig.db_pool.acquire() as conn:
         async with conn.cursor() as cursor:
-            insert_query = """
-            INSERT INTO documentdetection 
-            (SessionId, CSID, ID_Type, PredictedClassF, DocumentPhotopathF, BoundingBoxF, ConfidenceF, DetailsF, MSISDN)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
-            """
             for detection in detections:
-                await cursor.execute(insert_query, (
-                    detection.session_id,
-                    detection.csid,
-                    detection.id_type, 
-                    detection.predicted_class,
-                    detection.document_photo_path,
-                    detection.bounding_box,
-                    detection.confidence,
-                    json.dumps(detection.details),
-                    detection.msisdn
-                ))
+                await cursor.callproc(
+                    'SP_INSERT_DD', 
+                    (
+                        detection.msisdn, 
+                        detection.session_id, 
+                        detection.csid, 
+                        detection.id_type, 
+                        detection.predicted_class, 
+                        detection.document_photo_path, 
+                        detection.bounding_box, 
+                        detection.confidence, 
+                        json.dumps(detection.details)
+                    )
+                )
             await conn.commit()
-            logger.info("Detections inserted into the database.")
+            logger.info("Detections inserted into the database via stored procedure.")
