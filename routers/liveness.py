@@ -2,13 +2,14 @@ from fastapi import APIRouter, HTTPException, Request
 from datetime import datetime
 import json
 from database import dbconfig
-
+from UTILS.logger import logger
 router = APIRouter()
 
 @router.post("/liveness/post-data")
 async def post_data(request: Request):
     request_data = await request.json()
-
+    logger.info(f"Trying to insert liveness data:  {type(request_data)}")
+    logger.info(f"Trying to insert type of liveness data:  {request_data}")
     session_id = request_data.get("SessionId")
     csid = request_data.get("CSID")
     liveness_photo_path = request_data.get("AuditImages", [{}])[0].get("S3Object", {}).get("Name")
@@ -26,14 +27,14 @@ async def post_data(request: Request):
         "Confidence": confidence,
         "BoundingBox": bounding_box,
         "CSID": csid,
-        "Status": status,
+        "Status": 1 if status == "SUCCEEDED" else 0,
         "LivenessPhotoPath": liveness_photo_path,
         "Details": json.dumps({
             "ReferenceImage": reference_img,
             "AuditImages": audit_images
         })
     }
-    await insert_liveness_result(session_id, csid, liveness_photo_path, bounding_box, float(confidence), status, msisdn, liveness_data["Details"])
+    await insert_liveness_result(session_id, csid, liveness_photo_path, bounding_box, float(confidence), 1 if status == "SUCCEEDED" else 0, msisdn, liveness_data["Details"])
     return {"message": "Data processed successfully", "data": liveness_data}
 
 async def insert_liveness_result(session_id, csid, liveness_photo_path, bounding_box, confidence, status, msisdn, details):
