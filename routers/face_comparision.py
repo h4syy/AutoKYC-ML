@@ -6,6 +6,7 @@ import os
 import shutil
 import json
 from database import dbconfig
+from UTILS.image_cropper import image_cropper
 
 router = APIRouter()
 
@@ -29,7 +30,15 @@ async def face_compare(
 
     try:
         result = await run_face_comparison(temp_front_document, temp_liveness_path)
+        source_image_details = result["source_image_bounding_box"]
+        print(source_image_details,flush=True)
+        if source_image_details:
+            crop_result = image_cropper(temp_front_document, source_image_details)
 
+            print(f"Cropped image saved at: {crop_result}", flush=True)
+        else:
+            print("Source image bounding box not found in the result.", flush=True)
+        
         face_matches = result['face_matches']
 
         for match in face_matches:
