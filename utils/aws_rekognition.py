@@ -53,6 +53,7 @@ async def run_face_comparison(source_image_path: str, target_image_path: str):
         for match in face_matches:
             similarity = match['Similarity']
             face_bounding_box = match['Face']['BoundingBox']
+            confidence = match['Face']['Confidence']
             bounding_box = {
                 "width": face_bounding_box['Width'],
                 "height": face_bounding_box['Height'],
@@ -61,6 +62,7 @@ async def run_face_comparison(source_image_path: str, target_image_path: str):
             }
             results['face_matches'].append({
                 "similarity": similarity,
+                "confidence": confidence,
                 "bounding_box": bounding_box
             })
 
