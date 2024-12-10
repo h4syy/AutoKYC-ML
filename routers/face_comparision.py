@@ -19,8 +19,8 @@ async def face_compare(
     msisdn: int = Form(...)
 ):
     logger.info("Face comparison inference started.")
-    temp_front_document = os.path.join("/output", document_front.filename)
-    temp_liveness_path = os.path.join("/output", liveness_document.filename)
+    temp_front_document = os.path.join("output", document_front.filename)
+    temp_liveness_path = os.path.join("output", liveness_document.filename)
     
     # Save uploaded files temporarily
     with open(temp_front_document, "wb") as buffer:
