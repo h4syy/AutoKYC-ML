@@ -94,23 +94,29 @@ async def detect_document(
             os.remove(temp_image_path)
             logger.info(f"Temporary file {temp_image_path} removed.")
 
+            
+
 async def insert_detections_into_db(detections: list[Detection]):
     async with dbconfig.db_pool.acquire() as conn:
         async with conn.cursor() as cursor:
             for detection in detections:
-                await cursor.callproc(
-                    'SP_INSERT_DD', 
-                    (
-                        detection.msisdn, 
-                        detection.session_id, 
-                        detection.csid, 
-                        detection.id_type, 
-                        detection.predicted_class, 
-                        detection.document_photo_path, 
-                        detection.bounding_box, 
-                        detection.confidence, 
-                        json.dumps(detection.details)
-                    )
-                )
+                # Execute the stored procedure
+                await cursor.callproc('SP_INSERT_DD', (
+                    detection.msisdn,
+                    detection.session_id,
+                    detection.csid,
+                    detection.id_type,
+                    detection.predicted_class,
+                    detection.document_photo_path,
+                    detection.bounding_box,
+                    detection.confidence,
+                    json.dumps(detection.details),
+                    1
+                ))
+                
+                # Fetch the result set returned by the SP
+                result = await cursor.fetchall()
+                logger.info(f"Stored procedure response: {result}")
+                
             await conn.commit()
             logger.info("Detections inserted into the database via stored procedure.")

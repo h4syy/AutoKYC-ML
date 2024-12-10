@@ -29,12 +29,14 @@ async def face_compare(
 
     try:
         result = await run_face_comparison(temp_front_document, temp_liveness_path)
-
         face_matches = result['face_matches']
 
         for match in face_matches:
+            logger.info("this is for match", match)
             similarity = match['similarity']
+            confidence = match['confidence']
             details = {
+                "confidence": confidence,
                 "similarity": similarity,
                 "bounding_box": match['bounding_box']
             }
@@ -42,6 +44,8 @@ async def face_compare(
             await insert_face_compare_result(
                 session_id=session_id,
                 csid=csid,
+                Cropped_img_path= temp_liveness_path,
+                confidence=confidence,
                 similarity=similarity,
                 details=details,
                 msisdn=msisdn
@@ -62,12 +66,29 @@ async def face_compare(
         face_matches=[FaceComparisonResult(**match) for match in face_matches],
         unmatched_faces=result['unmatched_faces'],
         msisdn=msisdn,
-        session_id=session_id
+        session_id=session_id,
     )
 
-async def insert_face_compare_result(session_id, csid, similarity, details, msisdn):
-    sp_query = "CALL SP_INSERT_FACECOMPARE(%s, %s, %s, %s, %s)"
+async def insert_face_compare_result(session_id, csid, similarity, confidence, details, msisdn, Cropped_img_path):
+    sp_query = "CALL SP_INSERT_FACECOMPARE(%s, %s, %s, %s, %s, %s, %s)"
     async with dbconfig.db_pool.acquire() as conn:
         async with conn.cursor() as cursor:
-            await cursor.execute(sp_query, (msisdn, session_id, csid, similarity, json.dumps(details)))
-            await conn.commit()
+        # Assuming `cursor.execute()` and `cursor.fetchone()` return the SP result
+            # Execute the stored procedure
+                response = await cursor.execute(sp_query, (msisdn, session_id, csid, confidence, similarity, Cropped_img_path, json.dumps(details)))
+                result = await cursor.fetchall()  # Fetch all results (returns a list of tuples)
+
+                # Extract the first row (if the SP returns only one row)
+                if result:
+                    row = result[0]  
+
+                    msg = row[0]         
+                    fc_status = row[1]   
+                    sp_code = row[2]     
+                    fc_status_decoded = int.from_bytes(fc_status, byteorder='big')
+
+                    print("Message:", msg)
+                    print("FC Status:", fc_status_decoded)
+                    print("SP Code (int):", sp_code)
+                
+                await conn.commit()
