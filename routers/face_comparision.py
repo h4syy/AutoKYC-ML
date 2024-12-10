@@ -42,15 +42,21 @@ async def face_compare(
         face_matches = result['face_matches']
 
         for match in face_matches:
+            logger.info("this is for match", match)
             similarity = match['similarity']
+            confidence = match['confidence']
             details = {
+                "confidence": confidence,
                 "similarity": similarity,
                 "bounding_box": match['bounding_box']
             }
 
+
             await insert_face_compare_result(
                 session_id=session_id,
                 csid=csid,
+                Cropped_img_path= temp_liveness_path,
+                confidence=confidence,
                 similarity=similarity,
                 details=details,
                 msisdn=msisdn
@@ -74,9 +80,9 @@ async def face_compare(
         session_id=session_id
     )
 
-async def insert_face_compare_result(session_id, csid, similarity, details, msisdn):
-    sp_query = "CALL SP_INSERT_FACECOMPARE(%s, %s, %s, %s, %s)"
+async def insert_face_compare_result(session_id, csid, similarity, confidence, details, msisdn, Cropped_img_path):
+    sp_query = "CALL SP_INSERT_FACECOMPARE(%s, %s, %s, %s, %s, %s, %s)"
     async with dbconfig.db_pool.acquire() as conn:
         async with conn.cursor() as cursor:
-            await cursor.execute(sp_query, (msisdn, session_id, csid, similarity, json.dumps(details)))
+            await cursor.execute(sp_query, (msisdn, session_id, csid, confidence, Cropped_img_path, similarity, json.dumps(details)))
             await conn.commit()
