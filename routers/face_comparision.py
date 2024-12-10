@@ -6,6 +6,7 @@ import os
 import shutil
 import json
 from database import dbconfig
+from UTILS.image_cropper import image_cropper
 
 router = APIRouter()
 
@@ -18,8 +19,8 @@ async def face_compare(
     msisdn: int = Form(...)
 ):
     logger.info("Face comparison inference started.")
-    temp_front_document = os.path.join("/output", document_front.filename)
-    temp_liveness_path = os.path.join("/output", liveness_document.filename)
+    temp_front_document = os.path.join("output", document_front.filename)
+    temp_liveness_path = os.path.join("output", liveness_document.filename)
     
     # Save uploaded files temporarily
     with open(temp_front_document, "wb") as buffer:
@@ -29,6 +30,15 @@ async def face_compare(
 
     try:
         result = await run_face_comparison(temp_front_document, temp_liveness_path)
+        source_image_details = result["source_image_bounding_box"]
+        print(source_image_details,flush=True)
+        if source_image_details:
+            crop_result = image_cropper(temp_front_document, source_image_details)
+
+            print(f"Cropped image saved at: {crop_result}", flush=True)
+        else:
+            print("Source image bounding box not found in the result.", flush=True)
+        
         face_matches = result['face_matches']
 
         for match in face_matches:
@@ -40,6 +50,7 @@ async def face_compare(
                 "similarity": similarity,
                 "bounding_box": match['bounding_box']
             }
+
 
             await insert_face_compare_result(
                 session_id=session_id,
@@ -67,28 +78,12 @@ async def face_compare(
         unmatched_faces=result['unmatched_faces'],
         msisdn=msisdn,
         session_id=session_id,
+        confidence = confidence
     )
 
 async def insert_face_compare_result(session_id, csid, similarity, confidence, details, msisdn, Cropped_img_path):
     sp_query = "CALL SP_INSERT_FACECOMPARE(%s, %s, %s, %s, %s, %s, %s)"
     async with dbconfig.db_pool.acquire() as conn:
         async with conn.cursor() as cursor:
-        # Assuming `cursor.execute()` and `cursor.fetchone()` return the SP result
-            # Execute the stored procedure
-                response = await cursor.execute(sp_query, (msisdn, session_id, csid, confidence, similarity, Cropped_img_path, json.dumps(details)))
-                result = await cursor.fetchall()  # Fetch all results (returns a list of tuples)
-                print(result)
-                # Extract the first row (if the SP returns only one row)
-                if result:
-                    row = result[0]  
-
-                    msg = row[0]         
-                    fc_status = row[1]   
-                    sp_code = row[2]     
-                    fc_status_decoded = int.from_bytes(fc_status, byteorder='big')
-
-                    print("Message:", msg)
-                    print("FC Status:", fc_status_decoded)
-                    print("SP Code (int):", sp_code)
-                
-                await conn.commit()
+            await cursor.execute(sp_query, (msisdn, session_id, csid, confidence, similarity, Cropped_img_path, json.dumps(details)))
+            await conn.commit()
