@@ -77,7 +77,7 @@ async def insert_face_compare_result(session_id, csid, similarity, confidence, d
             # Execute the stored procedure
                 response = await cursor.execute(sp_query, (msisdn, session_id, csid, confidence, similarity, Cropped_img_path, json.dumps(details)))
                 result = await cursor.fetchall()  # Fetch all results (returns a list of tuples)
-
+                print(result)
                 # Extract the first row (if the SP returns only one row)
                 if result:
                     row = result[0]  
