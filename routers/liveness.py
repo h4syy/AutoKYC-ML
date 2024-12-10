@@ -36,12 +36,26 @@ async def post_data(request: Request):
     await insert_liveness_result(session_id, csid, liveness_photo_path, bounding_box, float(confidence), status, msisdn, liveness_data["Details"])
     return {"message": "Data processed successfully", "data": liveness_data}
 
-async def insert_liveness_result(session_id, csid, liveness_photo_path, bounding_box, confidence, status, msisdn, details):
-    query = """
-    INSERT INTO liveness (SessionId, CreatedDate, CSID, LivenessPhotopath, BoundingBox, Confidence, Status, MSISDN, Details)
-    VALUES (%s, NOW(), %s, %s, %s, %s, %s, %s, %s)
-    """
+async def insert_liveness_result(msisdn, session_id, confidence, csid, liveness_photo_path, bounding_box, details):
+    sp_query = "CALL SP_INSERT_LIVENESS(%s, %s, %s, %s, %s, %s, %s)"
+    
     async with dbconfig.db_pool.acquire() as conn:
         async with conn.cursor() as cursor:
-            await cursor.execute(query, (session_id, csid, liveness_photo_path, bounding_box, confidence, status, msisdn, details))
+            await cursor.execute(sp_query, (msisdn, session_id, confidence, csid, liveness_photo_path, bounding_box, details))
+            
+            result = await cursor.fetchall()
+            print(result)
+
+            if result:
+                row = result[0]
+
+                msg = row[0]
+                lv_status = row[1]
+                sp_code = row[2]
+                lv_status_decoded = int.from_bytes(lv_status, byteorder='big')
+
+                print("Message:", msg)
+                print("LV Status:", lv_status_decoded)
+                print("SP Code (int):", sp_code)
+
             await conn.commit()
