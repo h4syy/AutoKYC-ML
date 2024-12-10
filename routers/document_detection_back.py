@@ -47,27 +47,27 @@ async def detect_document(
         prefix = class_name[:-1] if suffix in {"F", "B"} else class_name
         id_type = id_type_mapping.get(prefix, -1)
 
-        async with dbconfig.db_pool.acquire() as conn:
-            async with conn.cursor() as cursor:
-                await cursor.execute(
-                    "SELECT ID_Type, PredictedClassF FROM documentdetection WHERE SessionId = %s", 
-                    (session_id,)
-                )
-                existing_entries = await cursor.fetchall()
+        # async with dbconfig.db_pool.acquire() as conn:
+        #     async with conn.cursor() as cursor:
+        #         await cursor.execute(
+        #             "SELECT ID_Type, PredictedClassF FROM documentdetection WHERE SessionId = %s", 
+        #             (session_id,)
+        #         )
+        #         existing_entries = await cursor.fetchall()
 
-                if not existing_entries:
-                    if suffix != "F":
-                        raise HTTPException(
-                            status_code=400, 
-                            detail="First upload must be a front ID document."
-                        )
-                else:
-                    last_id_type, last_class = existing_entries[0]
-                    if id_type != last_id_type:
-                        raise HTTPException(
-                            status_code=400,
-                            detail="ID type mismatch. Upload back ID of the same type as the front ID."
-                        )
+        #         if not existing_entries:
+        #             if suffix != "F":
+        #                 raise HTTPException(
+        #                     status_code=400, 
+        #                     detail="First upload must be a front ID document."
+        #                 )
+        #         else:
+        #             last_id_type, last_class = existing_entries[0]
+        #             if id_type != last_id_type:
+        #                 raise HTTPException(
+        #                     status_code=400,
+        #                     detail="ID type mismatch. Upload back ID of the same type as the front ID."
+        #                 )
         detection = Detection(
             session_id=session_id,
             csid=csid,
@@ -94,23 +94,48 @@ async def detect_document(
             os.remove(temp_image_path)
             logger.info(f"Temporary file {temp_image_path} removed.")
 
+            
+
 async def insert_detections_into_db(detections: list[Detection]):
     async with dbconfig.db_pool.acquire() as conn:
         async with conn.cursor() as cursor:
             for detection in detections:
-                await cursor.callproc(
-                    'SP_INSERT_DD', 
-                    (
-                        detection.msisdn, 
-                        detection.session_id, 
-                        detection.csid, 
-                        detection.id_type, 
-                        detection.predicted_class, 
-                        detection.document_photo_path, 
-                        detection.bounding_box, 
-                        detection.confidence, 
-                        json.dumps(detection.details)
-                    )
-                )
+                # Execute the stored procedure
+                await cursor.callproc('SP_INSERT_DD', (
+                    detection.msisdn,
+                    detection.session_id,
+                    detection.csid,
+                    detection.id_type,
+                    detection.predicted_class,
+                    detection.document_photo_path,
+                    detection.bounding_box,
+                    detection.confidence,
+                    json.dumps(detection.details),
+                    1
+                ))
+                
+                    # Fetch the result set
+                result = await cursor.fetchall()
+                if result:
+
+                    row = result[0] 
+                    msg = row[0] 
+                    dd_status = row[1]
+                    sp_code = row[2]  # Extract the first value (e.g., '1')
+                    
+                    dd_status_decoded =  int.from_bytes(dd_status, byteorder='big')
+
+
+                    logger.info(f"Stored procedure response dd_status: {dd_status}")
+                else:
+                    dd_status = None
+                    logger.warning("No dd_status returned from the stored procedure.")
+
+                print(dd_status)
+                print(msg)
+                print(dd_status_decoded)
+                print(sp_code)
+
             await conn.commit()
             logger.info("Detections inserted into the database via stored procedure.")
+            # return dd_status  # Return the extracted status

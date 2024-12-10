@@ -14,7 +14,7 @@ model = torch.hub.load('ultralytics/yolov5', 'custom', path='best.pt', force_rel
 output_dir = '/output'
 os.makedirs(output_dir, exist_ok=True)
 
-@router.post("/document-detection/inference/front", response_model=DetectionResponse)
+@router.post("/document-detection/inference/front")
 async def detect_document(
     file: UploadFile = File(...),
     session_id: str = Form(...),
@@ -47,27 +47,6 @@ async def detect_document(
         prefix = class_name[:-1] if suffix in {"F", "B"} else class_name
         id_type = id_type_mapping.get(prefix, -1)
 
-        async with dbconfig.db_pool.acquire() as conn:
-            async with conn.cursor() as cursor:
-                await cursor.execute(
-                    "SELECT ID_Type, PredictedClassF FROM documentdetection WHERE SessionId = %s", 
-                    (session_id,)
-                )
-                existing_entries = await cursor.fetchall()
-
-                if not existing_entries:
-                    if suffix != "F":
-                        raise HTTPException(
-                            status_code=400, 
-                            detail="First upload must be a front ID document."
-                        )
-                else:
-                    last_id_type, last_class = existing_entries[0]
-                    if id_type != last_id_type:
-                        raise HTTPException(
-                            status_code=400,
-                            detail="ID type mismatch. Upload back ID of the same type as the front ID."
-                        )
         detection = Detection(
             session_id=session_id,
             csid=csid,
@@ -83,7 +62,17 @@ async def detect_document(
         await insert_detections_into_db([detection])
 
         logger.info("Document detection inference completed successfully.")
-        return DetectionResponse(detections=[detection])
+        payload = {
+            "ResponseData": {
+                "IsDocumentScanCompleted": True if id_type == 2 else False,
+                "IsVerified":False,
+                "IsBackDocumentNeed": False if id_type == 2 else True,
+                "DocumentType": id_type,
+            },
+            "ResponseCode": "100",
+            "ResponseDescription": "Success"
+        }
+        return payload
 
     except Exception as e:
         logger.error(f"Error during document detection: {e}")
@@ -109,7 +98,8 @@ async def insert_detections_into_db(detections: list[Detection]):
                         detection.document_photo_path, 
                         detection.bounding_box, 
                         detection.confidence, 
-                        json.dumps(detection.details)
+                        json.dumps(detection.details),
+                        0
                     )
                 )
             await conn.commit()
