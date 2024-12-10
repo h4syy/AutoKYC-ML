@@ -21,6 +21,7 @@ class DetectionResponse(BaseModel):
 class FaceComparisonResult(BaseModel):
     similarity: float
     bounding_box: Dict[str, float]
+    confidence: float
 
 # Response schema for face comparison
 class FaceComparisonResponse(BaseModel):

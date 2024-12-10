@@ -77,12 +77,13 @@ async def face_compare(
         face_matches=[FaceComparisonResult(**match) for match in face_matches],
         unmatched_faces=result['unmatched_faces'],
         msisdn=msisdn,
-        session_id=session_id
+        session_id=session_id,
+        confidence = confidence
     )
 
 async def insert_face_compare_result(session_id, csid, similarity, confidence, details, msisdn, Cropped_img_path):
     sp_query = "CALL SP_INSERT_FACECOMPARE(%s, %s, %s, %s, %s, %s, %s)"
     async with dbconfig.db_pool.acquire() as conn:
         async with conn.cursor() as cursor:
-            await cursor.execute(sp_query, (msisdn, session_id, csid, confidence, Cropped_img_path, similarity, json.dumps(details)))
+            await cursor.execute(sp_query, (msisdn, session_id, csid, confidence, similarity, Cropped_img_path, json.dumps(details)))
             await conn.commit()
