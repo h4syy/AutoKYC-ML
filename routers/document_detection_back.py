@@ -65,6 +65,18 @@ async def detect_document(
         
             result = await run_face_comparison("C:/Users/sulav.adhikari/Desktop/CHECK/shreshka.jpg", "C:/Users/sulav.adhikari/Desktop/CHECK/ImportedPhoto.755515784.737019.jpeg")
             logger.info(f"Face Compare result:{result}")
+
+            payload = {
+                "ResponseData": {
+                    "IsDocumentScanCompleted": True,
+                    "IsVerified": True,
+                    "IsBackDocumentNeed": False,
+                    "DocumentType": id_type,
+                },
+                "ResponseCode": 400,
+                "ResponseDescription": "Done"
+            }
+            return payload
             
         else:   
             payload = {

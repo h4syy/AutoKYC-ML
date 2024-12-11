@@ -52,9 +52,17 @@ async def face_compare(
             }
 
 
-            fc_status_decoded = await insert_face_compare_result()
+        fc_status_decoded =  await insert_face_compare_result(
+                session_id=session_id,
+                csid=csid,
+                Cropped_img_path= temp_liveness_path,
+                confidence=confidence,
+                similarity=similarity,
+                details=details,
+                msisdn=msisdn
+                )
             
-            if fc_status_decoded == 1:
+        if fc_status_decoded == 1:
                 payload = {
                     "ResponseData":{
                         "IsDocumentScanCompleted": True,
@@ -66,7 +74,7 @@ async def face_compare(
                     "ResponseDescription": "Success"
                 }
 
-            else:
+        else:
                 payload = {
                     "ResponseData":{
                         "IsDocumentScanCompleted": False,
@@ -78,9 +86,10 @@ async def face_compare(
                     "ResponseDescription": "Redirect to Document Detection Front"
                 }
 
-        logger.info("Face comparison completed.")
-        return payload
+                logger.info("Face comparison completed.")
+                return payload
 
+        logger.info("Face comparison completed.")
     except Exception as e:
         logger.error(f"Error during face comparison: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -90,14 +99,14 @@ async def face_compare(
         os.remove(temp_liveness_path)
         logger.info("Temporary images removed.")
 
-        return FaceComparisonResponse(
-            source_image_bounding_box=result['source_image_bounding_box'],
-            face_matches=[FaceComparisonResult(**match) for match in face_matches],
-            unmatched_faces=result['unmatched_faces'],
-            msisdn=msisdn,
-            session_id=session_id,
-            confidence = confidence
-        )
+    # return FaceComparisonResponse(
+    #     source_image_bounding_box=result['source_image_bounding_box'],
+    #     face_matches=[FaceComparisonResult(**match) for match in face_matches],
+    #     unmatched_faces=result['unmatched_faces'],
+    #     msisdn=msisdn,
+    #     session_id=session_id,
+    #     confidence = confidence
+    # )
 
 async def insert_face_compare_result(session_id, csid, similarity, confidence, details, msisdn, Cropped_img_path):
     sp_query = "CALL SP_INSERT_FACECOMPARE(%s, %s, %s, %s, %s, %s, %s)"
@@ -127,3 +136,4 @@ async def insert_face_compare_result(session_id, csid, similarity, confidence, d
             
             await conn.commit()
             logger.info("Detections inserted into database via stored procedure")
+            return fc_status_decoded
