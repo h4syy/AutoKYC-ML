@@ -46,7 +46,7 @@ async def detect_document(
         suffix = class_name[-1] 
         prefix = class_name[:-1] if suffix in {"F", "B"} else class_name
         id_type = id_type_mapping.get(prefix, -1)
-
+ 
         detection = Detection(
             session_id=session_id,
             csid=csid,
@@ -59,19 +59,42 @@ async def detect_document(
             msisdn=msisdn
         )
 
-        await insert_detections_into_db([detection])
-
+        dd_status_decoded = await insert_detections_into_db([detection])
+        print(dd_status_decoded)
+        if id_type == 2:
+            payload = {
+                "ResponseData": {
+                    "IsDocumentScanCompleted": True,
+                    "IsVerified": False,
+                    "IsBackDocumentNeed": False,
+                    "DocumentType": id_type,
+                },
+                "ResponseCode": 300,
+                "ResponseDescription": "Success direct to Face Compare"
+            }
+        elif dd_status_decoded == 0:   
+            payload = {
+                "ResponseData": {
+                    "IsDocumentScanCompleted": False,
+                    "IsVerified": False,
+                    "IsBackDocumentNeed": True,
+                    "DocumentType": id_type,
+                },
+                "ResponseCode": 200,
+                "ResponseDescription": "Redirect to Fornt"
+            }
+        else:
+            payload = {
+                    "ResponseData": {
+                        "IsDocumentScanCompleted": False,
+                        "IsVerified": False,
+                        "IsBackDocumentNeed": True,
+                        "DocumentType": id_type,
+                    },
+                    "ResponseCode": 100,
+                    "ResponseDescription": "Success direct to DDB"
+                }
         logger.info("Document detection inference completed successfully.")
-        payload = {
-            "ResponseData": {
-                "IsDocumentScanCompleted": True if id_type == 2 else False,
-                "IsVerified":False,
-                "IsBackDocumentNeed": False if id_type == 2 else True,
-                "DocumentType": id_type,
-            },
-            "ResponseCode": "100",
-            "ResponseDescription": "Success"
-        }
         return payload
 
     except Exception as e:
@@ -102,5 +125,28 @@ async def insert_detections_into_db(detections: list[Detection]):
                         0
                     )
                 )
+                # Fetch the result set
+                result = await cursor.fetchall()
+                if result:
+
+                    row = result[0] 
+                    msg = row[0] 
+                    dd_status = row[1]
+                    sp_code = row[2]  # Extract the first value (e.g., '1')
+                    
+                    dd_status_decoded =  int.from_bytes(dd_status, byteorder='big')
+
+
+                    logger.info(f"Stored procedure response dd_status: {dd_status}")
+                else:
+                    dd_status = None
+                    logger.warning("No dd_status returned from the stored procedure.")
+
+                print(dd_status)
+                print(msg)
+                print(dd_status_decoded)
+                print(sp_code)
+
             await conn.commit()
             logger.info("Detections inserted into the database via stored procedure.")
+            return dd_status_decoded  # Return the extracted status

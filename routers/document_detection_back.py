@@ -6,7 +6,7 @@ import shutil
 import os
 import torch
 import json
-
+from UTILS.aws_rekognition import run_face_comparison
 router = APIRouter() 
 
 model = torch.hub.load('ultralytics/yolov5', 'custom', path='best.pt', force_reload=False)
@@ -47,27 +47,6 @@ async def detect_document(
         prefix = class_name[:-1] if suffix in {"F", "B"} else class_name
         id_type = id_type_mapping.get(prefix, -1)
 
-        # async with dbconfig.db_pool.acquire() as conn:
-        #     async with conn.cursor() as cursor:
-        #         await cursor.execute(
-        #             "SELECT ID_Type, PredictedClassF FROM documentdetection WHERE SessionId = %s", 
-        #             (session_id,)
-        #         )
-        #         existing_entries = await cursor.fetchall()
-
-        #         if not existing_entries:
-        #             if suffix != "F":
-        #                 raise HTTPException(
-        #                     status_code=400, 
-        #                     detail="First upload must be a front ID document."
-        #                 )
-        #         else:
-        #             last_id_type, last_class = existing_entries[0]
-        #             if id_type != last_id_type:
-        #                 raise HTTPException(
-        #                     status_code=400,
-        #                     detail="ID type mismatch. Upload back ID of the same type as the front ID."
-        #                 )
         detection = Detection(
             session_id=session_id,
             csid=csid,
@@ -80,11 +59,28 @@ async def detect_document(
             msisdn=msisdn
         )
 
-        await insert_detections_into_db([detection])
+        dd_status_decoded = await insert_detections_into_db([detection])
 
-        logger.info("Document detection inference completed successfully.")
-        return DetectionResponse(detections=[detection])
+        if dd_status_decoded == 1:
+        
+            result = await run_face_comparison("C:/Users/sulav.adhikari/Desktop/CHECK/shreshka.jpg", "C:/Users/sulav.adhikari/Desktop/CHECK/ImportedPhoto.755515784.737019.jpeg")
+            logger.info(f"Face Compare result:{result}")
+            
+        else:   
+            payload = {
+                "ResponseData": {
+                    "IsDocumentScanCompleted": False,
+                    "IsVerified": False,
+                    "IsBackDocumentNeed": True,
+                    "DocumentType": id_type,
+                },
+                "ResponseCode": 400,
+                "ResponseDescription": "Redirect to Back"
+            }
 
+            logger.info("Document detection inference completed successfully.")
+            return payload
+    
     except Exception as e:
         logger.error(f"Error during document detection: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -138,4 +134,4 @@ async def insert_detections_into_db(detections: list[Detection]):
 
             await conn.commit()
             logger.info("Detections inserted into the database via stored procedure.")
-            # return dd_status  # Return the extracted status
+            return dd_status_decoded  # Return the extracted status
