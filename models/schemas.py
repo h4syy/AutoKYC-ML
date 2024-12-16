@@ -15,7 +15,9 @@ class Detection(BaseModel):
 
 # Response schema for document detection
 class DetectionResponse(BaseModel):
-    detections: List[Detection]
+   ResponseData: dict
+   ResponseCode: int
+   ResponseDescription: str
 
 # Model for face comparison result
 class FaceComparisonResult(BaseModel):
