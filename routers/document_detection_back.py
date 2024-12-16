@@ -8,10 +8,11 @@ import os
 import torch
 import json
 from UTILS.config import get_image_save_path
+from pathlib import Path
 
 router = APIRouter() 
-
-model = torch.hub.load('ultralytics/yolov5', 'custom', path='best.pt', force_reload=False)
+model_path = Path("best.pt").resolve()
+model = torch.hub.load('ultralytics/yolov5', 'custom', path=str(model_path), force_reload=True)
 
 @router.post("/document-detection/inference/back")
 async def detect_document(
