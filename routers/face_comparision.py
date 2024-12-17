@@ -1,12 +1,12 @@
 from fastapi import APIRouter, UploadFile, HTTPException, File, Form
-from MODELS.schemas import FaceComparisonResponse, FaceComparisonResult
-from UTILS.aws_rekognition import run_face_comparison
-from UTILS.logger import logger
+from schema.schemas import FaceComparisonResponse, FaceComparisonResult
+from utilities.aws_rekognition import run_face_comparison
+from utilities.logger import logger
 import os
 import shutil
 import json
 from database import dbconfig
-from UTILS.image_cropper import image_cropper
+from utilities.image_cropper import image_cropper
 
 router = APIRouter()
 

@@ -1,17 +1,17 @@
 from fastapi import APIRouter, UploadFile, File, HTTPException, Form
-from MODELS.schemas import Detection, DetectionResponse
-from UTILS.logger import logger
+from schema.schemas import Detection, DetectionResponse
+from utilities.logger import logger
 from database import dbconfig
 import shutil
 import os
 import torch
 import json
-from UTILS.config import get_image_save_path
+from utilities.config import get_image_save_path
 from pathlib import Path
 
 router = APIRouter()
 
-model_path = Path("best.pt").resolve()
+model_path = Path("yolo/best.pt").resolve()
 model = torch.hub.load('ultralytics/yolov5', 'custom', path=str(model_path), force_reload=True)
 
 @router.post("/document-detection/inference/front")
