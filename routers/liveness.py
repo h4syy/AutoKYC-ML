@@ -4,6 +4,7 @@ import json
 from database import dbconfig
 from utilities.logger import logger
 router = APIRouter()
+from utilities.config import get_image_save_path_minio
 
 @router.post("/liveness/post-data")
 async def post_data(request: Request):

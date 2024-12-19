@@ -1,5 +1,8 @@
 import aiomysql
 import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 db_config = {
        "host": os.getenv("MYSQL_HOST"),
@@ -8,6 +11,7 @@ db_config = {
        "password": os.getenv("MYSQL_PASSWORD"),
        "db": os.getenv("MYSQL_DB"),
    }
+
 
 async def init_db_pool():
        global db_pool

@@ -2,17 +2,37 @@ from fastapi import APIRouter, UploadFile, File, HTTPException, Form
 from schema.schemas import Detection, DetectionResponse
 from utilities.logger import logger
 from database import dbconfig
+from utilities.face_compare import face_compare_auto
 import shutil
 import os
 import torch
 import json
-from utilities.config import get_image_save_path
+import numpy as np
+from PIL import Image
+from io import BytesIO
+from utilities.config import get_image_save_path_minio, client
+# Path to the cloned YOLOv5 repository
+#If you have linux (or deploying for linux) use:
 from pathlib import Path
+import pathlib
+temp = pathlib.PosixPath
+pathlib.WindowsPath = pathlib.PosixPath
 
 router = APIRouter()
 
-model_path = Path("best1_state_dict.pt  ").resolve()
-model = torch.hub.load('ultralytics/yolov5', 'custom', path=str(model_path), force_reload=True)
+# Paths to the YOLOv5 repository and model file
+YOLO_REPO_DIR = Path("yolov5").resolve()  # YOLOv5 repository path
+MODEL_PATH = Path("yolo/best.pt").resolve()  # Model file path
+
+# Load the YOLOv5 model using the local repository
+model = torch.hub.load(
+    str(YOLO_REPO_DIR),  # Path to the YOLOv5 repository
+    'custom',            # Custom model
+    path=str(MODEL_PATH),  # Path to the trained weights
+    source='local',       # Use local repository
+    force_reload=False    # Avoid unnecessary reloads
+)
+
 
 @router.post("/document-detection/inference/front")
 async def detect_document(
@@ -22,26 +42,40 @@ async def detect_document(
     msisdn: int = Form(...)
 ):
     logger.info(f"Document detection inference started for msisdn_id: {msisdn}")
-
-    document_photo_path_front = get_image_save_path(msisdn, "Id_front")
+    
+    # Generate the MinIO path for the file
+    document_photo_path_front = get_image_save_path_minio(msisdn, session_id, "Id_front")
+    
     try:
-        with open(document_photo_path_front, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
-        logger.info(f"File saved to {document_photo_path_front}")
+        # Upload file to MinIO
+        file_content = await file.read()
+        # Convert the BytesIO object to a PIL Image
+        image = Image.open(BytesIO(file_content))
 
-        results = model(document_photo_path_front)
+        # Convert the image to a format that YOLOv5 understands (NumPy array)
+        image = image.convert("RGB")  # Ensure it is in RGB mode
+        img_tensor = torch.from_numpy(np.array(image)).float()  # Convert to tensor
+
+        # Run inference with YOLOv5
+        results = model(img_tensor)  # Pass the tensor to YOLOv5
         if len(results.xyxy[0]) == 0:
             raise HTTPException(status_code=400, detail="No document detected.")
 
-        detection_data = results.xyxy[0].tolist()[0] 
+        detection_data = results.xyxy[0].tolist()[0]
+
+        print(detection_data)
+
+        if len(detection_data) < 6: 
+            raise HTTPException(status_code = 400, detail = "Invalid detection data format.")
+
         *box, confidence, cls = detection_data
         class_name = results.names[int(cls)]
 
         id_type_mapping = {
-            "CS": 1, 
-            "DL": 2,  
-            "NID": 3,  
-            "PP": 4   
+            "CS": 1,  # Citizenship
+            "DL": 2,  # Driving License
+            "NID": 3, # National ID
+            "PP": 4   # Passport
         }
         suffix = class_name[-1]
         prefix = class_name[:-1] if suffix in {"F", "B"} else class_name
@@ -59,7 +93,9 @@ async def detect_document(
             msisdn=msisdn
         )
 
+        # Insert detections into DB
         dd_status_decoded = await insert_detections_into_db([detection])
+
         if id_type == 2:  
             payload = {
                 "ResponseData": {
@@ -96,7 +132,7 @@ async def detect_document(
 
         logger.info("Document detection inference completed successfully.")
         return payload
-
+    
     except Exception as e:
         logger.error(f"Error during document detection: {e}")
         raise HTTPException(status_code=500, detail=str(e))
