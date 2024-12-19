@@ -11,7 +11,7 @@ from pathlib import Path
 
 router = APIRouter()
 
-model_path = Path("yolo/best.pt").resolve()
+model_path = Path("best1_state_dict.pt  ").resolve()
 model = torch.hub.load('ultralytics/yolov5', 'custom', path=str(model_path), force_reload=True)
 
 @router.post("/document-detection/inference/front")
