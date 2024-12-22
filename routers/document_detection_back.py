@@ -1,3 +1,4 @@
+import tempfile
 from fastapi import APIRouter, UploadFile, File, HTTPException, Form
 from schema.schemas import Detection, DetectionResponse
 from utilities.logger import logger
@@ -8,6 +9,7 @@ import os
 import torch
 import json
 import numpy as np
+from dotenv import load_dotenv
 from PIL import Image
 from io import BytesIO
 from utilities.config import get_image_save_path_minio, client
@@ -18,7 +20,11 @@ import pathlib
 temp = pathlib.PosixPath
 pathlib.WindowsPath = pathlib.PosixPath
 
+load_dotenv()
+
 router = APIRouter()
+
+MINIO_BUCKET = os.getenv("MINIO_BUCKET")
 
 # Paths to the YOLOv5 repository and model file
 YOLO_REPO_DIR = Path("yolov5").resolve()  # YOLOv5 repository path
@@ -47,17 +53,36 @@ async def detect_document(
     document_photo_path_back = get_image_save_path_minio(msisdn, session_id, "Id_back")
     
     try:
-        # Upload file to MinIO
+        # Upload the file to MinIO
         file_content = await file.read()
-        # Convert the BytesIO object to a PIL Image
-        image = Image.open(BytesIO(file_content))
 
-        # Convert the image to a format that YOLOv5 understands (NumPy array)
-        image = image.convert("RGB")  # Ensure it is in RGB mode
-        img_tensor = torch.from_numpy(np.array(image)).float()  # Convert to tensor
+        # Save the uploaded file directly to MinIO
+        with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as tmp_file:
+            tmp_filename = tmp_file.name
+            with open(tmp_filename, 'wb') as temp_file:
+                temp_file.write(file_content)
 
-        # Run inference with YOLOv5
-        results = model(img_tensor)  # Pass the tensor to YOLOv5
+        # Upload to MinIO using the MinIO client and the correct path
+        client.fput_object(
+            bucket_name=MINIO_BUCKET,  # Bucket name
+            object_name=document_photo_path_back,  # Path in MinIO
+            file_path=tmp_filename  # Local temporary file path
+        )
+        logger.info(f"File successfully uploaded to MinIO at: {document_photo_path_back}")
+
+        # Retrieve the image from MinIO for inference
+        response = client.get_object(MINIO_BUCKET, document_photo_path_back)
+        
+        # Save the retrieved image to a temporary file
+        with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as tmp_file:
+            tmp_filename = tmp_file.name
+            with open(tmp_filename, 'wb') as temp_file:
+                temp_file.write(response.read())
+
+        logger.info(f"Image successfully retrieved from MinIO: {document_photo_path_back}")
+
+        # Run inference with YOLOv5 by passing the retrieved image file path
+        results = model(tmp_filename) 
         if len(results.xyxy[0]) == 0:
             raise HTTPException(status_code=400, detail="No document detected.")
 

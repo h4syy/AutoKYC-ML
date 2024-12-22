@@ -3,8 +3,8 @@ from datetime import datetime
 import json
 from database import dbconfig
 from utilities.logger import logger
-router = APIRouter()
 from utilities.config import get_image_save_path_minio
+router = APIRouter()
 
 @router.post("/liveness/post-data")
 async def post_data(request: Request):
@@ -13,10 +13,11 @@ async def post_data(request: Request):
     logger.info(f"Trying to insert type of liveness data:  {request_data}")
     session_id = request_data.get("SessionId")
     csid = request_data.get("CSID")
-    livenessPhotopath = request_data.get("AuditImages", [{}])[0].get("S3Object", {}).get("Name")
+    livenessPhotopath = "Path/photo"
     bounding_box = json.dumps(request_data.get("AuditImages", [{}])[0].get("BoundingBox"))
     confidence = request_data.get("Confidence")
     msisdn = request_data.get("MSISDN")
+    print(type(msisdn))
     status = request_data.get("Status")
     reference_img = request_data.get("ReferenceImage")
     audit_images = request_data.get("AuditImages")
@@ -24,7 +25,6 @@ async def post_data(request: Request):
     liveness_data = {
         "SessionId": session_id,
         "MSISDN": msisdn,
-        "CreatedDate": datetime.now(),
         "Confidence": confidence,
         "BoundingBox": bounding_box,
         "CSID": csid,
@@ -36,10 +36,10 @@ async def post_data(request: Request):
         })
     }
 
-    lv_status_decoded = await insert_liveness_result(session_id, csid, livenessPhotopath, bounding_box, float(confidence), 1 if status == "SUCCEEDED" else 0, msisdn, liveness_data["Details"])
+    lv_status_decoded = await insert_liveness_result(msisdn, session_id, float(confidence), csid, livenessPhotopath, bounding_box, liveness_data["Details"])
     if lv_status_decoded == 1:
         payload = {
-            "ResponseData":{
+            "ResponseData": { 
                 "IsLivenessCompleted": True,
                 "IsDocumentScanCompleted": False,
                 "IsVerified": False,
@@ -52,7 +52,7 @@ async def post_data(request: Request):
 
     else:
         payload = {
-            "ResponseData":{
+            "ResponseData": {
                 "IsLivenessCompleted": False,
                 "IsDocumentScanCompleted": False,
                 "IsVerified": False,
@@ -68,24 +68,25 @@ async def post_data(request: Request):
 
 async def insert_liveness_result(msisdn, session_id, confidence, csid, livenessphotopath, bounding_box, details):
     sp_query = "CALL SP_INSERT_LIVENESS(%s, %s, %s, %s, %s, %s, %s)"
-    
     async with dbconfig.db_pool.acquire() as conn:
         async with conn.cursor() as cursor:
-            await cursor.execute(sp_query, (msisdn, session_id, csid, confidence, livenessphotopath, bounding_box, details))
-            
+            await cursor.execute(sp_query, (msisdn, session_id, float(confidence), csid, livenessphotopath, bounding_box, details))
+            print(msisdn, session_id, csid, float(confidence), livenessphotopath, bounding_box, details)
             result = await cursor.fetchall()
-            print(result)
+            print(result, flush=True)  
 
             if result:
                 row = result[0]
-
                 msg = row[0]
                 lv_status = row[1]
                 sp_code = row[2]
                 lv_status_decoded = int.from_bytes(lv_status, byteorder='big')
 
+            else:
+                lv_status_decoded = None
                 print("Message:", msg)
                 print("LV Status:", lv_status_decoded)
                 print("SP Code (int):", sp_code)
 
             await conn.commit()
+            return lv_status_decoded

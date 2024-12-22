@@ -4,6 +4,7 @@ from dotenv import load_dotenv
 from minio import Minio
 from minio.error import S3Error
 from io import BytesIO
+from utilities.logger import logger
 
 # Load environment variables
 load_dotenv()
@@ -58,7 +59,7 @@ def upload_to_minio(msisdn: int, suffix: str):
             length=file_size,
             content_type="image/jpeg",  # Adjust content type if needed
         )
-        print(f"File successfully uploaded to MinIO at '{remote_path}'.")
+        logger.info(f"File successfully uploaded to MinIO at '{remote_path}'.")
     except S3Error as exc:
         print("Error occurred while uploading to MinIO:", exc)
 
