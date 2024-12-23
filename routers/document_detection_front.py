@@ -32,13 +32,12 @@ MODEL_PATH = Path("yolo/best.pt").resolve()  # Model file path
 
 # Load the YOLOv5 model using the local repository
 model = torch.hub.load(
-    str(YOLO_REPO_DIR),  # Path to the YOLOv5 repository
-    'custom',            # Custom model
-    path=str(MODEL_PATH),  # Path to the trained weights
-    source='local',       # Use local repository
-    force_reload=False    # Avoid unnecessary reloads
+    str(YOLO_REPO_DIR),  
+    'custom',            
+    path=str(MODEL_PATH),  
+    source='local',       
+    force_reload=False    
 )
-
 
 @router.post("/document-detection/inference/front")
 async def detect_document(

@@ -5,6 +5,8 @@ from minio import Minio
 from minio.error import S3Error
 from io import BytesIO
 from utilities.logger import logger
+from PIL import Image, ImageDraw
+from base64 import b64decode
 
 # Load environment variables
 load_dotenv()
@@ -61,6 +63,10 @@ def upload_to_minio(msisdn: int, suffix: str):
         )
         logger.info(f"File successfully uploaded to MinIO at '{remote_path}'.")
     except S3Error as exc:
-        print("Error occurred while uploading to MinIO:", exc)
+        logger.error(f"Error occurred while uploading to MinIO: {exc}")
+        raise
+    except Exception as e:
+        logger.error(f"Failed to process and upload image: {e}")
+        raise
 
 
