@@ -1,18 +1,43 @@
+import tempfile
 from fastapi import APIRouter, UploadFile, File, HTTPException, Form
 from schema.schemas import Detection, DetectionResponse
 from utilities.logger import logger
 from database import dbconfig
+from utilities.face_compare import face_compare_auto
 import shutil
 import os
 import torch
 import json
-from utilities.config import get_image_save_path
+import numpy as np
+from dotenv import load_dotenv
+from PIL import Image
+from io import BytesIO
+from utilities.config import get_image_save_path_minio, client
+# Path to the cloned YOLOv5 repository
+#If you have linux (or deploying for linux) use:
 from pathlib import Path
+import pathlib
+temp = pathlib.PosixPath
+pathlib.WindowsPath = pathlib.PosixPath
+
+load_dotenv()
 
 router = APIRouter()
 
-model_path = Path("yolo/best.pt").resolve()
-model = torch.hub.load('ultralytics/yolov5', 'custom', path=str(model_path), force_reload=True)
+MINIO_BUCKET = os.getenv("MINIO_BUCKET")
+
+# Paths to the YOLOv5 repository and model file
+YOLO_REPO_DIR = Path("yolov5").resolve()  # YOLOv5 repository path
+MODEL_PATH = Path("yolo/best.pt").resolve()  # Model file path
+
+# Load the YOLOv5 model using the local repository
+model = torch.hub.load(
+    str(YOLO_REPO_DIR),  
+    'custom',            
+    path=str(MODEL_PATH),  
+    source='local',       
+    force_reload=False    
+)
 
 @router.post("/document-detection/inference/front")
 async def detect_document(
@@ -22,26 +47,56 @@ async def detect_document(
     msisdn: int = Form(...)
 ):
     logger.info(f"Document detection inference started for msisdn_id: {msisdn}")
-
-    document_photo_path_front = get_image_save_path(msisdn, "Id_front")
+    
+    # Generate the MinIO path for the file
+    document_photo_path_front = get_image_save_path_minio(msisdn, session_id, "Id_front")
+    
     try:
-        with open(document_photo_path_front, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
-        logger.info(f"File saved to {document_photo_path_front}")
+        # Upload the file to MinIO
+        file_content = await file.read()
 
-        results = model(document_photo_path_front)
+        # Save the uploaded file directly to MinIO
+        with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as tmp_file:
+            tmp_filename = tmp_file.name
+            with open(tmp_filename, 'wb') as temp_file:
+                temp_file.write(file_content)
+
+        # Upload to MinIO using the MinIO client and the correct path
+        client.fput_object(
+            bucket_name=MINIO_BUCKET,  # Bucket name
+            object_name=document_photo_path_front,  # Path in MinIO
+            file_path=tmp_filename  # Local temporary file path
+        )
+        logger.info(f"File successfully uploaded to MinIO at: {document_photo_path_front}")
+
+        # Retrieve the image from MinIO for inference
+        response = client.get_object(MINIO_BUCKET, document_photo_path_front)
+        
+        # Save the retrieved image to a temporary file
+        with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as tmp_file:
+            tmp_filename = tmp_file.name
+            with open(tmp_filename, 'wb') as temp_file:
+                temp_file.write(response.read())
+
+        logger.info(f"Image successfully retrieved from MinIO: {document_photo_path_front}")
+
+        # Run inference with YOLOv5 by passing the retrieved image file path
+        results = model(tmp_filename) 
         if len(results.xyxy[0]) == 0:
             raise HTTPException(status_code=400, detail="No document detected.")
 
-        detection_data = results.xyxy[0].tolist()[0] 
+        detection_data = results.xyxy[0].tolist()[0]
+
+        if len(detection_data) < 6: 
+            raise HTTPException(status_code = 400, detail = "Invalid detection data format.")
+
         *box, confidence, cls = detection_data
         class_name = results.names[int(cls)]
-
         id_type_mapping = {
-            "CS": 1, 
-            "DL": 2,  
-            "NID": 3,  
-            "PP": 4   
+            "CS": 1,  # Citizenship
+            "DL": 2,  # Driving License
+            "NID": 3, # National ID
+            "PP": 4   # Passport
         }
         suffix = class_name[-1]
         prefix = class_name[:-1] if suffix in {"F", "B"} else class_name
@@ -58,7 +113,7 @@ async def detect_document(
             details={},
             msisdn=msisdn
         )
-
+        # Insert detections into DB
         dd_status_decoded = await insert_detections_into_db([detection])
         if id_type == 2:  
             payload = {
@@ -96,7 +151,7 @@ async def detect_document(
 
         logger.info("Document detection inference completed successfully.")
         return payload
-
+    
     except Exception as e:
         logger.error(f"Error during document detection: {e}")
         raise HTTPException(status_code=500, detail=str(e))

@@ -7,7 +7,7 @@ import shutil
 import json
 from database import dbconfig
 from utilities.image_cropper import image_cropper
-from utilities.config import get_image_save_path
+from utilities.config import get_image_save_path_minio
 
 router = APIRouter()
 
@@ -30,7 +30,7 @@ async def face_compare_auto(
 
         cropped_image_path = None
         if source_image_details:
-            cropped_image_path = get_image_save_path(msisdn, "cropped_image")
+            cropped_image_path = get_image_save_path_minio(msisdn, session_id, "cropped_image")
             crop_result = image_cropper(document_front_path, source_image_details)
             shutil.move(crop_result, cropped_image_path)
             logger.info(f"Cropped image saved at: {cropped_image_path}")

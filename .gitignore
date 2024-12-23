@@ -8,3 +8,7 @@
 /Photo
 
 **__pycache__
+
+/venv
+
+/yolov5

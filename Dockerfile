@@ -1,4 +1,3 @@
-# Use a suitable Python base image
 FROM python:3.10-slim
 
 # Set the working directory
@@ -30,7 +29,10 @@ RUN pip install --no-cache-dir --timeout=120 -r requirements.txt
 
 RUN pip install --no-cache-dir torch torchvision torchaudio ultralytics
 
-# Copy the application code
+# Clone the YOLOv5 repository
+RUN git clone https://github.com/ultralytics/yolov5.git /app/yolov5
+
+# Copy the remaining application code
 COPY . .
 
 # Command to run your application

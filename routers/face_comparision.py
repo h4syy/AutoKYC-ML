@@ -7,6 +7,7 @@ import shutil
 import json
 from database import dbconfig
 from utilities.image_cropper import image_cropper
+from utilities.config import get_image_save_path_minio
 
 router = APIRouter()
 
