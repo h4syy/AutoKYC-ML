@@ -70,3 +70,17 @@ def upload_to_minio(msisdn: int, suffix: str):
         raise
 
 
+def download_from_minio(object_name: str, download_path: str):
+    """Download file from MinIO to the local path."""
+    try:
+        # Download the object from MinIO
+        client.fget_object(MINIO_BUCKET, object_name, download_path)
+        logger.info(f"Downloaded {object_name} from MinIO to {download_path}")
+    except S3Error as exc:
+        logger.error(f"Error occurred while downloading from MinIO: {exc}")
+        raise
+    except Exception as e:
+        logger.error(f"Failed to download image from MinIO: {e}")
+        raise
+
+

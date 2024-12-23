@@ -1,5 +1,5 @@
 from fastapi import FastAPI
-from routers import document_detection_front, document_detection_back, face_comparision, liveness, backup
+from routers import document_detection_front, document_detection_back, face_comparision, liveness
 from database import dbconfig
 from contextlib import asynccontextmanager
 import os

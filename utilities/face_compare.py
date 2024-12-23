@@ -7,7 +7,8 @@ import shutil
 import json
 from database import dbconfig
 from utilities.image_cropper import image_cropper
-from utilities.config import get_image_save_path_minio
+from utilities.config import get_image_save_path_minio, MINIO_BUCKET, download_from_minio, client
+from tempfile import NamedTemporaryFile
 
 router = APIRouter()
 
@@ -22,22 +23,46 @@ async def face_compare_auto(
     logger.info("Face comparison inference started.")
     
     try:
-        document_front_path = document_front  
-        liveness_document_path = liveness_document  
+        # Create temporary files to store the images
+        document_front_local_path = NamedTemporaryFile(delete=False, suffix=".jpg").name
+        liveness_document_local_path = NamedTemporaryFile(delete=False, suffix=".jpg").name
 
-        result = await run_face_comparison(document_front_path, liveness_document_path)
-        source_image_details = result["source_image_bounding_box"]
+        # Download images from MinIO to temporary files
+        download_from_minio(document_front, document_front_local_path)
+        download_from_minio(liveness_document, liveness_document_local_path)
+
+        # Run face comparison with the downloaded images
+        result = await run_face_comparison(document_front_local_path, liveness_document_local_path)
+        source_image_details = result.get("source_image_bounding_box")
 
         cropped_image_path = None
         if source_image_details:
+            # Generate the path where the cropped image will be saved in MinIO
             cropped_image_path = get_image_save_path_minio(msisdn, session_id, "cropped_image")
-            crop_result = image_cropper(document_front_path, source_image_details)
-            shutil.move(crop_result, cropped_image_path)
-            logger.info(f"Cropped image saved at: {cropped_image_path}")
+            
+            # Perform image cropping and get the cropped image as a byte stream
+            cropped_image_stream = image_cropper(document_front_local_path, source_image_details)
+
+            if cropped_image_stream:
+                # Upload cropped image directly to MinIO
+                client.put_object(
+                    bucket_name=MINIO_BUCKET,
+                    object_name=cropped_image_path,
+                    data=cropped_image_stream,
+                    length=len(cropped_image_stream.getvalue()),
+                    content_type="image/jpeg"
+                )
+                logger.info(f"Cropped image uploaded to MinIO at: {cropped_image_path}")
+            else:
+                logger.error("Error while cropping the image.")
         else:
             logger.warning("Source image bounding box not found in the result.")
 
-        face_matches = result['face_matches']
+        face_matches = result.get('face_matches', [])
+        confidence = None
+        similarity = None
+        details = {}
+
         for match in face_matches:
             similarity = match['similarity']
             confidence = match['confidence']
@@ -47,6 +72,7 @@ async def face_compare_auto(
                 "bounding_box": match['bounding_box'],
             }
 
+        # Insert face comparison result into the database
         fc_status_decoded = await insert_face_compare_result(
             session_id=session_id,
             csid=csid,
@@ -57,6 +83,7 @@ async def face_compare_auto(
             msisdn=msisdn,
         )
 
+        # Prepare the response payload
         if fc_status_decoded == 1:
             payload = {
                 "ResponseData": {
@@ -80,9 +107,6 @@ async def face_compare_auto(
                 "ResponseDescription": "Redirect to Back"
             }
 
-            logger.info("Document detection inference completed successfully.")
-            return payload
-
         logger.info("Face comparison completed.")
         return payload
 
@@ -103,10 +127,7 @@ async def insert_face_compare_result(session_id, csid, similarity, confidence, d
             result = await cursor.fetchall()
             if result:
                 row = result[0]
-                msg = row[0]
                 fc_status = row[1]
-                sp_code = row[2]
-
                 fc_status_decoded = int.from_bytes(fc_status, byteorder="big")
                 logger.info(f"Stored procedure response fc_status: {fc_status}")
             else:
