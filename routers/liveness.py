@@ -55,7 +55,7 @@ async def post_data(
         liveness_data = {
             "SessionId": sessionId,
             "MSISDN": msisdn,
-            "Confidence": confidence,
+            "Confidence": confidence / 100,
             "BoundingBox": bounding_box_dict,
             "CSID": csid,
             "Status": status,

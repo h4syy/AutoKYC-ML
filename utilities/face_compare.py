@@ -77,8 +77,8 @@ async def face_compare_auto(
             session_id=session_id,
             csid=csid,
             Cropped_img_path=cropped_image_path,
-            confidence=confidence,
-            similarity=similarity,
+            confidence=confidence / 100,
+            similarity=similarity / 100,
             details=details,
             msisdn=msisdn,
         )

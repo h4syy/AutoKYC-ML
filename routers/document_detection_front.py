@@ -115,7 +115,29 @@ async def detect_document(
         )
         # Insert detections into DB
         dd_status_decoded = await insert_detections_into_db([detection])
-        if id_type == 2:  
+        if id_type == 2:
+            async with dbconfig.db_pool.acquire() as conn:
+                async with conn.cursor() as cursor:
+                    await cursor.callproc('SP_FETCH_PHOTO_URL', (msisdn,))
+                    paths_result = await cursor.fetchall()
+
+                    if not paths_result or len(paths_result[0]) < 2:
+                        raise HTTPException(status_code=500, detail="Failed to fetch required document paths.")
+                    
+                    liveness_document_path, document_front_path = paths_result[0]
+
+                    # Normalize MinIO paths
+                    document_front_path = os.path.normpath(document_front_path)
+                    liveness_document_path = os.path.normpath(liveness_document_path)
+
+            result = await face_compare_auto(
+                document_front=document_front_path,
+                liveness_document=liveness_document_path,
+                session_id=session_id,
+                csid=csid,
+                msisdn=msisdn
+            )
+            logger.info(f"Face Compare result: {result}")  
             payload = {
                 "ResponseData": {
                     "IsDocumentScanCompleted": True,
@@ -124,7 +146,7 @@ async def detect_document(
                     "DocumentType": id_type,
                 },
                 "ResponseCode": 300,
-                "ResponseDescription": "Success direct to Face Compare"
+                "ResponseDescription": "Success"
             }
         elif dd_status_decoded == 0: 
             payload = {
