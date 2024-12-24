@@ -1,9 +1,9 @@
-import os
 from PIL import Image
+from io import BytesIO
+import os
 
-def image_cropper(image_path: str, bounding_box: dict) -> str:
-    try :
-
+def image_cropper(image_path: str, bounding_box: dict) -> BytesIO:
+    try:
         with Image.open(image_path) as img:
             img_width, img_height = img.size
 
@@ -14,9 +14,12 @@ def image_cropper(image_path: str, bounding_box: dict) -> str:
 
             cropped_img = img.crop((left, top, right, bottom))
 
-            cropped_image_name = f"cropped_{os.path.basename(image_path)}"
-            cropped_image_path = os.path.join('datastore', cropped_image_name)
-            cropped_img.save(cropped_image_path)
+            # Save the cropped image to a BytesIO stream instead of a file
+            cropped_image_stream = BytesIO()
+            cropped_img.save(cropped_image_stream, format='JPEG')
+            cropped_image_stream.seek(0)  # Go to the start of the stream
+
+            return cropped_image_stream
     except Exception as e:
-        print("Error aayo", e,flush=True)
-    return cropped_image_path
+        print(f"Error occurred while cropping image: {e}")
+        return None
